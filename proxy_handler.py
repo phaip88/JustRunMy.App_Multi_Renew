@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-proxy_handler.py -- Parse PROXY_URL and generate sing-box config.json
+proxy_handler.py -- Parse PROXY_URL and generate local proxy config.json
 
 Supported protocols:
   socks5://[user:pass@]host:port
@@ -13,7 +13,9 @@ Supported protocols:
   hysteria2://password@host:port?sni=xxx
   tuic://uuid:password@host:port?sni=xxx&alpn=h3&congestion_control=bbr
 
-Output: config.json with HTTP inbound on 127.0.0.1:8080
+Output:
+  config.json with HTTP inbound on 127.0.0.1:8080
+  proxy_engine.txt containing the required runtime: sing-box or xray
 """
 
 import os
@@ -136,6 +138,58 @@ def parse_vless(parsed, params):
         outbound["transport"] = transport
 
     return outbound
+
+
+def parse_vless_xray(parsed, params):
+    stream_settings = {
+        "network": "xhttp",
+        "security": params.get("security", ["none"])[0] or "none",
+        "xhttpSettings": {
+            "path": unquote(params.get("path", ["/"])[0] or "/"),
+            "mode": params.get("mode", ["auto"])[0] or "auto",
+        },
+    }
+
+    if stream_settings["security"] == "tls":
+        tls_settings = {
+            "allowInsecure": params.get(
+                "insecure", params.get("allowInsecure", ["0"])
+            )[0] == "1"
+        }
+
+        sni = params.get("sni", [""])[0]
+        if sni:
+            tls_settings["serverName"] = sni
+
+        fp = params.get("fp", [""])[0]
+        if fp:
+            tls_settings["fingerprint"] = fp
+
+        alpn = params.get("alpn", [""])[0]
+        if alpn:
+            tls_settings["alpn"] = alpn.split(",")
+
+        stream_settings["tlsSettings"] = tls_settings
+
+    return {
+        "protocol": "vless",
+        "tag": "proxy",
+        "settings": {
+            "vnext": [
+                {
+                    "address": parsed.hostname,
+                    "port": parsed.port or 443,
+                    "users": [
+                        {
+                            "id": parsed.username,
+                            "encryption": params.get("encryption", ["none"])[0] or "none",
+                        }
+                    ],
+                }
+            ]
+        },
+        "streamSettings": stream_settings,
+    }
 
 
 def parse_vmess(url_str):
@@ -275,6 +329,8 @@ def main():
     scheme = proxy_url.split("://")[0].lower()
     print(f"Parsing proxy URI ({scheme}://***)")
 
+    proxy_engine = "sing-box"
+
     if scheme == "vmess":
         outbound = parse_vmess(proxy_url)
     else:
@@ -286,7 +342,11 @@ def main():
         elif scheme in ("http", "https"):
             outbound = parse_http(parsed)
         elif scheme == "vless":
-            outbound = parse_vless(parsed, params)
+            if params.get("type", [""])[0] == "xhttp":
+                proxy_engine = "xray"
+                outbound = parse_vless_xray(parsed, params)
+            else:
+                outbound = parse_vless(parsed, params)
         elif scheme in ("hy2", "hysteria2"):
             outbound = parse_hysteria2(parsed, params)
         elif scheme == "tuic":
@@ -295,30 +355,56 @@ def main():
             print(f"Unsupported protocol: {scheme}")
             sys.exit(1)
 
-    config = {
-        "log": {"level": "info", "timestamp": True},
-        "inbounds": [
-            {
-                "type": "http",
-                "tag": "http-in",
-                "listen": LISTEN_HOST,
-                "listen_port": LISTEN_PORT,
-            }
-        ],
-        "outbounds": [
-            outbound,
-            {"type": "direct", "tag": "direct"},
-        ],
-    }
+    if proxy_engine == "xray":
+        config = {
+            "log": {"loglevel": "warning"},
+            "inbounds": [
+                {
+                    "tag": "http-in",
+                    "listen": LISTEN_HOST,
+                    "port": LISTEN_PORT,
+                    "protocol": "http",
+                }
+            ],
+            "outbounds": [
+                outbound,
+                {"protocol": "freedom", "tag": "direct"},
+            ],
+        }
+    else:
+        config = {
+            "log": {"level": "info", "timestamp": True},
+            "inbounds": [
+                {
+                    "type": "http",
+                    "tag": "http-in",
+                    "listen": LISTEN_HOST,
+                    "listen_port": LISTEN_PORT,
+                }
+            ],
+            "outbounds": [
+                outbound,
+                {"type": "direct", "tag": "direct"},
+            ],
+        }
 
     with open("config.json", "w") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
 
-    server = outbound.get("server", "N/A")
-    port = outbound.get("server_port", "N/A")
-    print(f"sing-box config.json generated.")
+    with open("proxy_engine.txt", "w") as f:
+        f.write(proxy_engine)
+
+    if proxy_engine == "xray":
+        server = outbound["settings"]["vnext"][0]["address"]
+        port = outbound["settings"]["vnext"][0]["port"]
+    else:
+        server = outbound.get("server", "N/A")
+        port = outbound.get("server_port", "N/A")
+
+    print(f"{proxy_engine} config.json generated.")
     print(f"  Inbound:  http://{LISTEN_HOST}:{LISTEN_PORT}")
-    print(f"  Outbound: {outbound['type']} -> {server}:{port}")
+    outbound_type = outbound.get("type", outbound.get("protocol", "N/A"))
+    print(f"  Outbound: {outbound_type} -> {server}:{port}")
 
 
 if __name__ == "__main__":

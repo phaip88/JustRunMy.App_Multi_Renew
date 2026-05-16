@@ -393,10 +393,12 @@ def main():
             pass
 
         if login(sb):
-            renew(sb)
+            return 0 if renew(sb) else 1
         else:
             print("\n登录环节失败，终止后续续期操作。")
             send_tg_message("[X]", "登录失败", "未知")
 
+            return 1
+
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
