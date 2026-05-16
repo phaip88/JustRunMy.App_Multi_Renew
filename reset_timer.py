@@ -126,7 +126,12 @@ _EXPAND_JS = """
 
 _EXISTS_JS = """
 (function(){
-    return document.querySelector('input[name="cf-turnstile-response"]') !== null;
+    return document.querySelector('input[name="cf-turnstile-response"]') !== null
+        || document.querySelector('.cf-turnstile') !== null
+        || Array.from(document.querySelectorAll('iframe')).some(function(f){
+            var src = f.src || '';
+            return src.includes('cloudflare') || src.includes('turnstile') || src.includes('challenges');
+        });
 })()
 """
 
@@ -145,6 +150,7 @@ _TURNSTILE_STATE_JS = """
     return {
         tokenReady: !!(token && token.value && token.value.length > 20),
         verifying: bodyText.includes('verifying'),
+        failed: bodyText.includes('verification failed'),
         hasContainer: !!container
     };
 })()
@@ -226,11 +232,15 @@ def _wait_for_turnstile_token(sb, timeout_seconds: float, label: str) -> bool:
         try:
             state = sb.execute_script(_TURNSTILE_STATE_JS)
         except Exception:
-            state = {"tokenReady": False, "verifying": False}
+            state = {"tokenReady": False, "verifying": False, "failed": False}
 
         if state.get("tokenReady"):
             print(f"  {label} 已通过")
             return True
+
+        if state.get("failed"):
+            print(f"  {label} 已明确失败")
+            return False
 
         if state.get("verifying"):
             print(f"  {label} 仍在自动验证中...")
@@ -495,7 +505,8 @@ def renew(sb) -> bool:
             print("倒计时似乎没有重置到最高值，请人工检查截图。")
             sb.save_screenshot("renew_warning.png")
             send_tg_message("[!]", "续期异常(请检查)", timer_text)
-            return True 
+            send_tg_photo("renew_warning.png", "续期异常(请检查)")
+            return False
     except Exception as e:
         print(f"读取倒计时失败，但流程已执行完毕: {e}")
         sb.save_screenshot("renew_timer_read_fail.png")
