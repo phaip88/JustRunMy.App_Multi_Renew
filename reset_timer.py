@@ -209,8 +209,9 @@ def human_type_input(sb, selector: str, text: str):
     try:
         sb.wait_for_element_visible(selector, timeout=15)
         sb.clear(selector)
+        element = sb.find_element(selector)
         for char in text:
-            sb.type(selector, char)
+            element.send_keys(char)
             time.sleep(random.uniform(0.05, 0.15))
         return True
     except Exception as e:
