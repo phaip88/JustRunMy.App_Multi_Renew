@@ -142,7 +142,7 @@ jobs:
 
         echo "第 1 次执行..."
         if xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
-          python reset_timer.py; then
+          env RUN_ATTEMPT=1 python reset_timer.py; then
           echo "第 1 次执行成功"
           exit 0
         fi
@@ -152,7 +152,7 @@ jobs:
 
         echo "第 2 次执行..."
         xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
-          python reset_timer.py
+          env RUN_ATTEMPT=2 python reset_timer.py
 
     - name: 错误截图上传
       if: failure()
