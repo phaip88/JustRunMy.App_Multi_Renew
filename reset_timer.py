@@ -204,6 +204,17 @@ def handle_turnstile(sb) -> bool:
         print("  已静默通过")
         return True
 
+    try:
+        print("  先尝试 SeleniumBase 官方 GUI 点击...")
+        sb.uc_gui_click_captcha()
+        for _ in range(10):
+            time.sleep(0.5)
+            if sb.execute_script(_SOLVED_JS):
+                print("  官方 GUI 点击通过")
+                return True
+    except Exception as e:
+        print(f"  官方 GUI 点击未完成: {e}")
+
     for _ in range(3):
         try: sb.execute_script(_EXPAND_JS)
         except Exception: pass
@@ -377,7 +388,13 @@ def main():
     print("=" * 50)
     
     proxy_url_env = os.environ.get("PROXY_URL", "").strip()
-    sb_kwargs = {"uc": True, "test": True, "headless": False}
+    sb_kwargs = {
+        "uc": True,
+        "test": True,
+        "headless": False,
+        "incognito": True,
+        "locale": "en",
+    }
     
     if proxy_url_env:
         local_proxy = "http://127.0.0.1:8080"
