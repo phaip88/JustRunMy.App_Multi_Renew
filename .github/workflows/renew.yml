@@ -3,7 +3,7 @@ name: JustRunMy 自动续期 (无序随机版)
 on:
   workflow_dispatch:
   schedule:
-    # 每天北京时间 06:00 (UTC 22:00) 触发
+    # 每天北京时间 06:00 (UTC 22:00) 触发一次，再由脚本判断是否属于“两天一次”的执行日
     - cron: '0 22 * * *'
 
 jobs:
@@ -13,13 +13,33 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       should_run: ${{ steps.check-schedule.outputs.should_run }}
     steps:
-    - name: 📅 每日多账号随机签到
+    - name: 📅 每两天多账号随机签到
       id: check-schedule
       shell: bash
       run: |
-        # 每天执行，不再跳过
-        echo "should_run=true" >> $GITHUB_OUTPUT
-        echo "📅 每日签到模式已启动，所有账号将在不同时间执行"
+        # 手动触发时始终执行
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "should_run=true" >> $GITHUB_OUTPUT
+          echo "📅 手动触发，直接执行"
+          exit 0
+        fi
+
+        # 以北京时间日期计算，每隔 2 天执行一次
+        # 2026-05-16 作为锚点日，可按需要自行调整
+        TODAY_BJ=$(TZ='Asia/Shanghai' date +%F)
+        ANCHOR_DATE="2026-05-16"
+
+        TODAY_TS=$(date -d "$TODAY_BJ" +%s)
+        ANCHOR_TS=$(date -d "$ANCHOR_DATE" +%s)
+        DIFF_DAYS=$(( (TODAY_TS - ANCHOR_TS) / 86400 ))
+
+        if [ $(( DIFF_DAYS % 2 )) -eq 0 ]; then
+          echo "should_run=true" >> $GITHUB_OUTPUT
+          echo "📅 今天是执行日：$TODAY_BJ"
+        else
+          echo "should_run=false" >> $GITHUB_OUTPUT
+          echo "⏭️ 今天不是执行日：$TODAY_BJ，跳过"
+        fi
 
     - name: 🎲 生成账号矩阵
       id: set-matrix
@@ -28,7 +48,7 @@ jobs:
       env:
         ALL_SECRETS: ${{ toJson(secrets) }}
       run: |
-        # 提取所有 EML_x 账号索引并打乱顺序 (shuf)
+        # 提取所有 EML_x 账号索引并打乱顺序
         ACCOUNTS=$(echo "$ALL_SECRETS" | jq -r 'keys[] | select(startswith("EML_"))' | sed 's/EML_//' | shuf)
 
         if [ -z "$ACCOUNTS" ]; then
@@ -61,14 +81,12 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: ⏳ 随机延迟 (2-6小时)
-      if: github.event_name == 'schedule'
+    - name: ⏳ 随机延迟 (0-30分钟)
       run: |
-        DELAY=$(shuf -i 7200-21600 -n 1)
-        H=$(( DELAY / 3600 ))
-        M=$(( (DELAY % 3600) / 60 ))
+        DELAY=$(shuf -i 0-1800 -n 1)
+        M=$(( DELAY / 60 ))
         S=$(( DELAY % 60 ))
-        echo "账号 ${{ matrix.account_index }} 随机延迟: $H 小时 $M 分 $S 秒"
+        echo "账号 ${{ matrix.account_index }} 随机延迟: $M 分 $S 秒"
         sleep $DELAY
 
     - name: 🛡️ 启动 sing-box 代理代理
@@ -87,7 +105,7 @@ jobs:
         mv "sing-box-${SINGBOX_VER}-linux-amd64/sing-box" ./sing-box
         chmod +x ./sing-box
 
-        # 生成配置文件 (调用项目中的解析脚本)
+        # 生成配置文件
         python proxy_handler.py
 
         # 后台运行
@@ -115,7 +133,18 @@ jobs:
         PROXY_URL: ${{ secrets.PROXY_URL }}
       run: |
         echo "开始处理账号索引: ${{ matrix.account_index }}"
-        # 启动虚拟显示器并执行脚本
+
+        echo "第 1 次执行..."
+        if xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
+          python reset_timer.py; then
+          echo "✅ 第 1 次执行成功"
+          exit 0
+        fi
+
+        echo "⚠️ 第 1 次执行失败，20 分钟后重试..."
+        sleep 1200
+
+        echo "第 2 次执行..."
         xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
           python reset_timer.py
 
