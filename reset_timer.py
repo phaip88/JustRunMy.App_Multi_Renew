@@ -6,7 +6,9 @@ import sys
 import time
 import subprocess
 import requests
+import random
 from seleniumbase import SB
+from selenium.webdriver.common.action_chains import ActionChains
 
 LOGIN_URL = "https://justrunmy.app/id/Account/Login"
 DOMAIN    = "justrunmy.app"
@@ -135,6 +137,19 @@ _SOLVED_JS = """
 })()
 """
 
+_TURNSTILE_STATE_JS = """
+(function(){
+    var token = document.querySelector('input[name="cf-turnstile-response"]');
+    var bodyText = (document.body && document.body.innerText || '').toLowerCase();
+    var container = document.querySelector('.cf-turnstile');
+    return {
+        tokenReady: !!(token && token.value && token.value.length > 20),
+        verifying: bodyText.includes('verifying'),
+        hasContainer: !!container
+    };
+})()
+"""
+
 _COORDS_JS = """
 (function(){
     var iframes = document.querySelectorAll('iframe');
@@ -189,6 +204,39 @@ def js_fill_input(sb, selector: str, text: str):
     }})()
     """)
 
+
+def human_type_input(sb, selector: str, text: str):
+    try:
+        sb.wait_for_element_visible(selector, timeout=15)
+        sb.clear(selector)
+        for char in text:
+            sb.type(selector, char)
+            time.sleep(random.uniform(0.05, 0.15))
+        return True
+    except Exception as e:
+        print(f"  逐字输入失败，回退 JS 填充: {e}")
+        js_fill_input(sb, selector, text)
+        return False
+
+
+def _wait_for_turnstile_token(sb, timeout_seconds: float, label: str) -> bool:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        try:
+            state = sb.execute_script(_TURNSTILE_STATE_JS)
+        except Exception:
+            state = {"tokenReady": False, "verifying": False}
+
+        if state.get("tokenReady"):
+            print(f"  {label} 已通过")
+            return True
+
+        if state.get("verifying"):
+            print(f"  {label} 仍在自动验证中...")
+
+        time.sleep(1)
+    return False
+
 def _activate_window():
     for cls in ["chrome", "chromium", "Chromium", "Chrome", "google-chrome"]:
         try:
@@ -234,45 +282,76 @@ def _click_turnstile(sb):
     print(f"  物理级点击 Turnstile ({ax}, {ay})")
     _xdotool_click(ax, ay)
 
+def _offset_click_turnstile(sb) -> bool:
+    try:
+        container = sb.find_element(".cf-turnstile")
+    except Exception:
+        return False
+
+    try:
+        width = container.size["width"]
+        base_offset_x = -(width / 2) + (width * 0.12)
+        offset_x = base_offset_x + random.uniform(-5, 5)
+        offset_y = random.uniform(-5, 5)
+        ActionChains(sb.driver).move_to_element(container).pause(
+            random.uniform(0.5, 0.8)
+        ).move_to_element_with_offset(
+            container,
+            offset_x,
+            offset_y,
+        ).click_and_hold().pause(
+            random.uniform(0.1, 0.25)
+        ).release().perform()
+        print("  已执行元素级偏移点击")
+        return True
+    except Exception as e:
+        print(f"  元素级偏移点击失败: {e}")
+        return False
+
+
 def handle_turnstile(sb) -> bool:
     print("处理 Cloudflare Turnstile 验证...")
     time.sleep(2)
-    
+
     if sb.execute_script(_SOLVED_JS):
         print("  已静默通过")
         return True
 
+    if _wait_for_turnstile_token(sb, 20, "自动等待"):
+        return True
+
+    if _offset_click_turnstile(sb) and _wait_for_turnstile_token(sb, 12, "偏移点击后等待"):
+        return True
+
     try:
-        print("  先尝试 SeleniumBase 官方 GUI 点击...")
+        print("  再尝试 SeleniumBase 官方 GUI 点击...")
         sb.uc_gui_click_captcha()
-        for _ in range(10):
-            time.sleep(0.5)
-            if sb.execute_script(_SOLVED_JS):
-                print("  官方 GUI 点击通过")
-                return True
+        if _wait_for_turnstile_token(sb, 10, "官方 GUI 点击后等待"):
+            return True
     except Exception as e:
         print(f"  官方 GUI 点击未完成: {e}")
 
     for _ in range(3):
-        try: sb.execute_script(_EXPAND_JS)
-        except Exception: pass
+        try:
+            sb.execute_script(_EXPAND_JS)
+        except Exception:
+            pass
         time.sleep(0.5)
 
     for attempt in range(6):
         if sb.execute_script(_SOLVED_JS):
             print(f"  Turnstile 通过（第 {attempt + 1} 次尝试）")
             return True
-        try: sb.execute_script(_EXPAND_JS)
-        except Exception: pass
+        try:
+            sb.execute_script(_EXPAND_JS)
+        except Exception:
+            pass
         time.sleep(0.3)
-        
+
         _click_turnstile(sb)
-        
-        for _ in range(8):
-            time.sleep(0.5)
-            if sb.execute_script(_SOLVED_JS):
-                print(f"  Turnstile 通过（第 {attempt + 1} 次尝试）")
-                return True
+
+        if _wait_for_turnstile_token(sb, 4, f"第 {attempt + 1} 次物理点击后等待"):
+            return True
         print(f"  第 {attempt + 1} 次未通过，重试...")
 
     print("  Turnstile 6 次均失败")
@@ -301,11 +380,11 @@ def login(sb) -> bool:
         pass
 
     print(f"填写邮箱...")
-    js_fill_input(sb, 'input[name="Email"]', EMAIL)
+    human_type_input(sb, 'input[name="Email"]', EMAIL)
     time.sleep(0.3)
     
     print("填写密码...")
-    js_fill_input(sb, 'input[name="Password"]', PASSWORD)
+    human_type_input(sb, 'input[name="Password"]', PASSWORD)
     time.sleep(1)
 
     if sb.execute_script(_EXISTS_JS):
