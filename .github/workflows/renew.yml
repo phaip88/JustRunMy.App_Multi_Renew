@@ -118,16 +118,8 @@ jobs:
     - name: 安装自动化依赖
       run: |
         sudo apt-get update
-        sudo apt-get install -y fonts-noto-cjk unzip
-        pip install playwright requests
-        playwright install firefox
-
-    - name: 下载 Camoufox
-      run: |
-        CAMOUFOX_VERSION="150.0.2-alpha.26"
-        curl -L -o camoufox.zip "https://github.com/daijro/camoufox/releases/download/v150.0.2-beta.25/camoufox-${CAMOUFOX_VERSION}-lin.x86_64.zip"
-        unzip -o camoufox.zip -d camoufox
-        chmod +x camoufox/camoufox
+        sudo apt-get install -y fonts-noto-cjk unzip xvfb
+        pip install DrissionPage requests
 
     - name: 运行账号 ${{ matrix.account_index }} 续期
       env:
@@ -139,7 +131,8 @@ jobs:
       run: |
         echo "开始处理账号索引: ${{ matrix.account_index }}"
         echo "开始执行..."
-        env RUN_ATTEMPT=1 CAMOUFOX_PATH=./camoufox/camoufox python reset_timer.py
+        xvfb-run --auto-servernum --server-args="-screen 0 1440x900x24" \
+          env RUN_ATTEMPT=1 BROWSER_PATH=/usr/bin/google-chrome python reset_timer.py
 
     - name: 错误截图上传
       if: failure()
