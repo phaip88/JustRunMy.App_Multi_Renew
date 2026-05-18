@@ -121,6 +121,15 @@ def click_turnstile_shadow_input(page):
     challenge_solution = page.ele("@name=cf-turnstile-response", timeout=3)
     challenge_wrapper = challenge_solution.parent()
     challenge_iframe = challenge_wrapper.shadow_root.ele("tag:iframe", timeout=3)
+    challenge_iframe.run_js(
+        """
+        function getRandomInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+        Object.defineProperty(MouseEvent.prototype, 'screenX', { value: getRandomInt(800, 1200) });
+        Object.defineProperty(MouseEvent.prototype, 'screenY', { value: getRandomInt(400, 600) });
+        """
+    )
     challenge_body = challenge_iframe.ele("tag:body").shadow_root
     challenge_button = challenge_body.ele("tag:input", timeout=3)
     challenge_button.click()
