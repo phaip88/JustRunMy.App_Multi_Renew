@@ -155,14 +155,33 @@ def click_turnstile_like_human(page):
         print("  未找到可点击的 Turnstile 区域")
         return False
 
-    click_x = box["x"] + min(24, box["width"] * 0.12)
-    click_y = box["y"] + box["height"] / 2
-    print(f"  移动鼠标到 Turnstile checkbox ({click_x:.0f}, {click_y:.0f})")
-    human_mouse_move(page, click_x, click_y)
-    time.sleep(random.randint(300, 800) / 1000)
-    page.mouse.click(click_x, click_y)
-    print("  已执行 Turnstile checkbox 点击")
-    return True
+    click_points = [
+        ("checkbox", box["x"] + min(24, box["width"] * 0.12), box["y"] + box["height"] / 2),
+        ("center", box["x"] + box["width"] / 2, box["y"] + box["height"] / 2),
+    ]
+
+    for label, click_x, click_y in click_points:
+        print(f"  移动鼠标到 Turnstile {label} ({click_x:.0f}, {click_y:.0f})")
+        human_mouse_move(page, click_x, click_y)
+        time.sleep(random.randint(300, 800) / 1000)
+        page.mouse.click(click_x, click_y)
+        print(f"  已执行 Turnstile {label} 点击")
+
+        deadline = time.time() + 3
+        while time.time() < deadline:
+            state = turnstile_state(page)
+            if state["tokenReady"]:
+                print(f"  Turnstile {label} 点击后直接通过")
+                return True
+            if state["verifying"]:
+                print(f"  Turnstile {label} 点击已触发验证")
+                return True
+            if state["failed"]:
+                print(f"  Turnstile {label} 点击后立即失败")
+                return False
+            time.sleep(0.5)
+
+    return False
 
 
 def has_turnstile(page):
