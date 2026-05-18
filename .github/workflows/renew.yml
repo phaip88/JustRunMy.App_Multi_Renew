@@ -126,9 +126,16 @@ jobs:
     - name: 安装自动化依赖
       run: |
         sudo apt-get update
-        sudo apt-get install -y xvfb x11-utils xdotool fonts-noto-cjk unzip
-        pip install seleniumbase requests
-        seleniumbase install chromedriver
+        sudo apt-get install -y fonts-noto-cjk unzip
+        pip install playwright requests
+        playwright install firefox
+
+    - name: 下载 Camoufox
+      run: |
+        CAMOUFOX_VERSION="150.0.2-alpha.26"
+        curl -L -o camoufox.zip "https://github.com/daijro/camoufox/releases/download/v150.0.2-beta.25/camoufox-${CAMOUFOX_VERSION}-lin.x86_64.zip"
+        unzip -o camoufox.zip -d camoufox
+        chmod +x camoufox/camoufox
 
     - name: 运行账号 ${{ matrix.account_index }} 续期
       env:
@@ -141,8 +148,7 @@ jobs:
         echo "开始处理账号索引: ${{ matrix.account_index }}"
 
         echo "第 1 次执行..."
-        if xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
-          env RUN_ATTEMPT=1 python reset_timer.py; then
+        if env RUN_ATTEMPT=1 CAMOUFOX_PATH=./camoufox/camoufox python reset_timer.py; then
           echo "第 1 次执行成功"
           exit 0
         fi
@@ -151,8 +157,7 @@ jobs:
         sleep 1200
 
         echo "第 2 次执行..."
-        xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
-          env RUN_ATTEMPT=2 python reset_timer.py
+        env RUN_ATTEMPT=2 CAMOUFOX_PATH=./camoufox/camoufox python reset_timer.py
 
     - name: 错误截图上传
       if: failure()
