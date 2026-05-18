@@ -277,6 +277,7 @@ def renew(page):
     if "2 days 23" in timer_text or "3 days" in timer_text:
         page.get_screenshot(path="renew_success.png", full_page=True)
         send_tg_message("[OK]", "续期完成", timer_text)
+        send_tg_photo("renew_success.png", f"续期完成，当前剩余时间: {timer_text}")
         return True
 
     page.get_screenshot(path="renew_warning.png", full_page=True)
