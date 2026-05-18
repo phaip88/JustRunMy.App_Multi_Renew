@@ -125,6 +125,7 @@ jobs:
         Write-Output "开始处理账号索引: ${{ matrix.account_index }}"
         Write-Output "开始执行..."
         $env:RUN_ATTEMPT = "1"
+        $env:PYTHONUTF8 = "1"
         $env:BROWSER_PATH = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
         python reset_timer.py
 
