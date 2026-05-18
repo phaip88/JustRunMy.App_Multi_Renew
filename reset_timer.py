@@ -155,12 +155,12 @@ def click_turnstile_like_human(page):
         print("  未找到可点击的 Turnstile 区域")
         return False
 
-    center_x = box["x"] + box["width"] / 2
-    center_y = box["y"] + box["height"] / 2
-    print(f"  移动鼠标到 Turnstile ({center_x:.0f}, {center_y:.0f})")
-    human_mouse_move(page, center_x, center_y)
+    click_x = box["x"] + min(24, box["width"] * 0.12)
+    click_y = box["y"] + box["height"] / 2
+    print(f"  移动鼠标到 Turnstile checkbox ({click_x:.0f}, {click_y:.0f})")
+    human_mouse_move(page, click_x, click_y)
     time.sleep(random.randint(300, 800) / 1000)
-    page.mouse.click(center_x, center_y)
+    page.mouse.click(click_x, click_y)
     return True
 
 
@@ -182,10 +182,27 @@ def handle_turnstile(page, context):
     return False
 
 
+def close_cookie_banner(page):
+    candidates = [
+        page.get_by_text("Accept All", exact=True),
+        page.get_by_text("Accept", exact=True),
+    ]
+    for candidate in candidates:
+        try:
+            if candidate.count():
+                candidate.first.click(timeout=3000)
+                print("已关闭 Cookie 弹窗")
+                time.sleep(random.uniform(0.3, 0.8))
+                return
+        except Exception:
+            continue
+
+
 def login(page):
     print(f"打开登录页面: {LOGIN_URL}")
     page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
     page.wait_for_selector('input[name="Email"]', timeout=15000)
+    close_cookie_banner(page)
 
     print("填写邮箱...")
     human_type(page.locator('input[name="Email"]'), EMAIL)
