@@ -94,6 +94,7 @@ jobs:
           Invoke-WebRequest -Uri "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-windows-64.zip" -OutFile "Xray-windows-64.zip"
           Expand-Archive -LiteralPath "Xray-windows-64.zip" -DestinationPath "xray-bin" -Force
           Start-Process -FilePath ".\xray-bin\xray.exe" -ArgumentList "run", "-config", "config.json" -WindowStyle Hidden
+        }
         else
           $singboxVer = "1.11.0"
           Write-Output "正在安装 sing-box v$singboxVer..."
