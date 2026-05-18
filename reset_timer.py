@@ -161,6 +161,7 @@ def click_turnstile_like_human(page):
     human_mouse_move(page, click_x, click_y)
     time.sleep(random.randint(300, 800) / 1000)
     page.mouse.click(click_x, click_y)
+    print("  已执行 Turnstile checkbox 点击")
     return True
 
 
@@ -316,11 +317,6 @@ def main():
 
         try:
             if not login(page):
-                send_tg_message("[X]", "登录失败", "未知")
-                for image_path in ("login_turnstile_fail.png", "login_failed.png"):
-                    if os.path.exists(image_path):
-                        send_tg_photo(image_path, "登录失败")
-                        break
                 return 1
             return 0 if renew(page) else 1
         finally:
