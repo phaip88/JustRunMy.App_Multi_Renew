@@ -76,14 +76,6 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: 随机延迟 (0-30分钟)
-      run: |
-        DELAY=$(shuf -i 0-1800 -n 1)
-        M=$(( DELAY / 60 ))
-        S=$(( DELAY % 60 ))
-        echo "账号 ${{ matrix.account_index }} 随机延迟: $M 分 $S 秒"
-        sleep "$DELAY"
-
     - name: 启动代理
       env:
         PROXY_URL: ${{ secrets.PROXY_URL }}
@@ -146,18 +138,8 @@ jobs:
         PROXY_URL: ${{ secrets.PROXY_URL }}
       run: |
         echo "开始处理账号索引: ${{ matrix.account_index }}"
-
-        echo "第 1 次执行..."
-        if env RUN_ATTEMPT=1 CAMOUFOX_PATH=./camoufox/camoufox python reset_timer.py; then
-          echo "第 1 次执行成功"
-          exit 0
-        fi
-
-        echo "第 1 次执行失败，20 分钟后重试..."
-        sleep 1200
-
-        echo "第 2 次执行..."
-        env RUN_ATTEMPT=2 CAMOUFOX_PATH=./camoufox/camoufox python reset_timer.py
+        echo "开始执行..."
+        env RUN_ATTEMPT=1 CAMOUFOX_PATH=./camoufox/camoufox python reset_timer.py
 
     - name: 错误截图上传
       if: failure()
