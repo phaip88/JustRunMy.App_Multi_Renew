@@ -59,7 +59,7 @@ jobs:
   renew:
     needs: setup
     if: needs.setup.outputs.should_run == 'true'
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     timeout-minutes: 360
     strategy:
       max-parallel: 1
@@ -77,48 +77,41 @@ jobs:
         python-version: '3.11'
 
     - name: 启动代理
+      shell: pwsh
       env:
         PROXY_URL: ${{ secrets.PROXY_URL }}
       run: |
-        if [ -z "$PROXY_URL" ]; then
-          echo "未设置 PROXY_URL，将尝试直连。"
+        if (-not $env:PROXY_URL) {
+          Write-Output "未设置 PROXY_URL，将尝试直连。"
           exit 0
-        fi
+        }
 
         python proxy_handler.py
-        PROXY_ENGINE=$(cat proxy_engine.txt)
+        $proxyEngine = Get-Content proxy_engine.txt
 
-        if [ "$PROXY_ENGINE" = "xray" ]; then
-          echo "检测到 XHTTP，使用 Xray..."
-          wget -q "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip"
-          unzip -q Xray-linux-64.zip xray
-          chmod +x ./xray
-          nohup ./xray run -config config.json > proxy.log 2>&1 &
+        if ($proxyEngine -eq "xray") {
+          Write-Output "检测到 XHTTP，使用 Xray..."
+          Invoke-WebRequest -Uri "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-windows-64.zip" -OutFile "Xray-windows-64.zip"
+          Expand-Archive -LiteralPath "Xray-windows-64.zip" -DestinationPath "xray-bin" -Force
+          Start-Process -FilePath ".\xray-bin\xray.exe" -ArgumentList "run", "-config", "config.json" -WindowStyle Hidden
         else
-          SINGBOX_VER="1.11.0"
-          echo "正在安装 sing-box v$SINGBOX_VER..."
-          wget -q "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-amd64.tar.gz"
-          tar -xzf "sing-box-${SINGBOX_VER}-linux-amd64.tar.gz"
-          mv "sing-box-${SINGBOX_VER}-linux-amd64/sing-box" ./sing-box
-          chmod +x ./sing-box
-          nohup ./sing-box run -c config.json > proxy.log 2>&1 &
-        fi
-
-        sleep 5
-
-        echo "验证代理出口..."
-        export http_proxy=http://127.0.0.1:8080
-        export https_proxy=http://127.0.0.1:8080
-        curl -fsS --connect-timeout 10 https://api.ipify.org || {
-          echo "代理出口验证失败"
-          cat proxy.log || true
-          exit 1
+          $singboxVer = "1.11.0"
+          Write-Output "正在安装 sing-box v$singboxVer..."
+          Invoke-WebRequest -Uri "https://github.com/SagerNet/sing-box/releases/download/v$singboxVer/sing-box-$singboxVer-windows-amd64.zip" -OutFile "sing-box.zip"
+          Expand-Archive -LiteralPath "sing-box.zip" -DestinationPath "sing-box-bin" -Force
+          $singboxExe = Get-ChildItem -Recurse "sing-box-bin" -Filter "sing-box.exe" | Select-Object -First 1
+          Start-Process -FilePath $singboxExe.FullName -ArgumentList "run", "-c", "config.json" -WindowStyle Hidden
         }
+
+        Start-Sleep -Seconds 5
+
+        Write-Output "验证代理出口..."
+        $env:http_proxy = "http://127.0.0.1:8080"
+        $env:https_proxy = "http://127.0.0.1:8080"
+        curl.exe -fsS --connect-timeout 10 https://api.ipify.org
 
     - name: 安装自动化依赖
       run: |
-        sudo apt-get update
-        sudo apt-get install -y fonts-noto-cjk unzip xvfb
         pip install DrissionPage requests
 
     - name: 运行账号 ${{ matrix.account_index }} 续期
@@ -129,10 +122,11 @@ jobs:
         TG_ID: ${{ secrets.TG_ID }}
         PROXY_URL: ${{ secrets.PROXY_URL }}
       run: |
-        echo "开始处理账号索引: ${{ matrix.account_index }}"
-        echo "开始执行..."
-        xvfb-run --auto-servernum --server-args="-screen 0 1440x900x24" \
-          env RUN_ATTEMPT=1 BROWSER_PATH=/usr/bin/google-chrome python reset_timer.py
+        Write-Output "开始处理账号索引: ${{ matrix.account_index }}"
+        Write-Output "开始执行..."
+        $env:RUN_ATTEMPT = "1"
+        $env:BROWSER_PATH = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+        python reset_timer.py
 
     - name: 错误截图上传
       if: failure()
