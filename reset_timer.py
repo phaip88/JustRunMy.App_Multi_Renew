@@ -177,21 +177,24 @@ def handle_turnstile(page, context):
     print(f"处理 Cloudflare Turnstile 验证: {context}")
     if wait_for_turnstile_token(page, 20, "自动等待"):
         return True
-    if click_turnstile_like_human(page) and wait_for_turnstile_token(page, 12, "人工轨迹点击后等待"):
+    if click_turnstile_like_human(page) and wait_for_turnstile_token(page, 30, "人工轨迹点击后等待"):
         return True
     print("  Turnstile 未通过")
     return False
 
 
 def close_cookie_banner(page):
-    candidates = [
-        page.get_by_text("Accept All", exact=True),
-        page.get_by_text("Accept", exact=True),
-    ]
-    for candidate in candidates:
+    candidates = (
+        'button:has-text("Accept All")',
+        'button:has-text("Accept")',
+        'text="Accept All"',
+        'text="Accept"',
+    )
+    for selector in candidates:
         try:
-            if candidate.count():
-                candidate.first.click(timeout=3000)
+            locator = page.locator(selector)
+            if locator.count():
+                locator.first.click(timeout=3000, force=True)
                 print("已关闭 Cookie 弹窗")
                 time.sleep(random.uniform(0.3, 0.8))
                 return
@@ -212,6 +215,7 @@ def login(page):
     print("填写密码...")
     human_type(page.locator('input[name="Password"]'), PASSWORD)
     time.sleep(random.uniform(0.8, 1.5))
+    close_cookie_banner(page)
 
     if has_turnstile(page) and not handle_turnstile(page, "登录页"):
         save_failure_screenshot(page, "login_turnstile_fail.png", "登录失败(Turnstile 未通过)")
