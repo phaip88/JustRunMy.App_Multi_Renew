@@ -132,7 +132,15 @@ def click_turnstile_shadow_input(page):
     )
     challenge_body = challenge_iframe.ele("tag:body").shadow_root
     challenge_button = challenge_body.ele("tag:input", timeout=3)
-    challenge_button.click()
+    before_checked = challenge_button.attr("checked")
+    print(f"  Turnstile checkbox 点击前 checked={before_checked!r}")
+    page.actions.move_to(challenge_button, duration=random.uniform(0.4, 0.9)).click()
+    time.sleep(random.uniform(0.8, 1.4))
+    after_checked = challenge_button.attr("checked")
+    print(f"  Turnstile checkbox 动作链点击后 checked={after_checked!r}")
+    if after_checked == before_checked:
+        challenge_button.click(by_js=False)
+        print("  已追加 Turnstile 元素模拟点击")
 
 
 def handle_turnstile(page, context):
